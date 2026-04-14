@@ -5,14 +5,14 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const multer = require('multer');
 
 const app = express();
-app.use(express.json());
-app.use(cors());
 
-// --- DATABASE CONNECTION (Private via Environment Variables) ---
+// --- CRITICAL: CORS must be configured for Web ---
+app.use(cors()); 
+app.use(express.json());
+
+// --- DATABASE CONNECTION ---
 const mongoURI = process.env.MONGO_URI; 
-mongoose.connect(mongoURI)
-    .then(() => console.log("Connected to MongoDB Atlas"))
-    .catch(err => console.log("DB Error:", err));
+mongoose.connect(mongoURI).then(() => console.log("MongoDB Atlas Connected"));
 
 // --- SCHEMAS ---
 const UserSchema = new mongoose.Schema({
@@ -27,7 +27,7 @@ const NoticeSchema = new mongoose.Schema({
 });
 const Notice = mongoose.model('Notice', NoticeSchema);
 
-// --- AWS S3 CONFIGURATION (Private via Environment Variables) ---
+// --- AWS S3 ---
 const s3Client = new S3Client({
     region: "ap-south-1",
     credentials: {
@@ -39,19 +39,22 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // --- ROUTES ---
 
-app.post('/login', async (req, res) => {
-    const { studentId, pass } = req.body;
-    const user = await User.findOne({ studentId, pass });
-    if (user) res.status(200).json(user);
-    else res.status(401).send("Invalid Credentials");
-});
+// Health Check (Open this in browser to see if server is awake)
+app.get('/', (req, res) => res.send("MCE Server is Awake and Running!"));
 
 app.post('/register', async (req, res) => {
     try {
         const user = new User(req.body);
         await user.save();
         res.status(200).json({ status: "Success" });
-    } catch (e) { res.status(500).send(e.message); }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/login', async (req, res) => {
+    const { studentId, pass } = req.body;
+    const user = await User.findOne({ studentId, pass });
+    if (user) res.status(200).json(user);
+    else res.status(401).json({ error: "Invalid Credentials" });
 });
 
 app.post('/post-notice', upload.single('image'), async (req, res) => {
@@ -66,8 +69,8 @@ app.post('/post-notice', upload.single('image'), async (req, res) => {
         const imageUrl = `https://image-fragmentation-bucket-123.s3.ap-south-1.amazonaws.com/${fileName}`;
         const notice = new Notice({ ...req.body, imageUrl });
         await notice.save();
-        res.status(200).json({ status: "Notice Posted" });
-    } catch (e) { res.status(500).send(e.message); }
+        res.status(200).json({ status: "Success" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/notices/:branch', async (req, res) => {
@@ -76,4 +79,4 @@ app.get('/notices/:branch', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server Active`));
+app.listen(PORT, () => console.log(`Backend Live on Port ${PORT}`));
