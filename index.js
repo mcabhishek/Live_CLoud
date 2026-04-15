@@ -5,59 +5,52 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const multer = require('multer');
 
 const app = express();
-app.use(cors()); 
+app.use(cors());
 app.use(express.json());
 
 // --- DB CONNECTION ---
-const mongoURI = process.env.MONGO_URI; 
-mongoose.connect(mongoURI).then(() => console.log("MongoDB Connected Successfully"));
+mongoose.connect(process.env.MONGO_URI).then(() => console.log("MongoDB Connected"));
 
 // --- SCHEMAS ---
 const User = mongoose.model('User', new mongoose.Schema({
     name: String, studentId: String, pass: String, 
-    role: { type: String, enum: ['Student', 'Staff'] }, branch: String 
+    role: { type: String, enum: ['Student', 'Staff'] }, 
+    branch: String, 
+    year: Number // 1, 2, 3, 4
 }));
 
 const Notice = mongoose.model('Notice', new mongoose.Schema({
-    senderName: String, branch: String, message: String, 
-    imageUrl: String, createdAt: { type: Date, default: Date.now }
+    senderName: String, branch: String, year: Number, 
+    message: String, fileUrl: String, 
+    fileType: String, // 'pdf' or 'image'
+    createdAt: { type: Date, default: Date.now }
 }));
 
-// --- AWS S3 CONFIG ---
+// --- AWS CONFIG ---
 const s3Client = new S3Client({
     region: "ap-south-1",
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY,
-        secretAccessKey: process.env.AWS_SECRET_KEY
-    }
+    credentials: { accessKeyId: process.env.AWS_ACCESS_KEY, secretAccessKey: process.env.AWS_SECRET_KEY }
 });
 const upload = multer({ storage: multer.memoryStorage() });
 
 // --- ROUTES ---
 
-// Health Check
-app.get('/', (req, res) => res.send("Edu Source Server is Awake and Running!"));
+app.get('/', (req, res) => res.send("Edu Source Server Live"));
 
-// Login
 app.post('/login', async (req, res) => {
-    const { studentId, pass } = req.body;
-    const user = await User.findOne({ studentId, pass });
-    if (user) res.status(200).json(user);
-    else res.status(401).json({ error: "Invalid Credentials" });
+    const user = await User.findOne({ studentId: req.body.studentId, pass: req.body.pass });
+    user ? res.json(user) : res.status(401).send("Fail");
 });
 
-// Register
 app.post('/register', async (req, res) => {
-    try {
-        const user = new User(req.body);
-        await user.save();
-        res.status(200).json({ status: "Success" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    const user = new User(req.body);
+    await user.save();
+    res.json({ status: "Success" });
 });
 
-// Post Notice with S3 Upload
-app.post('/post-notice', upload.single('image'), async (req, res) => {
+app.post('/post-notice', upload.single('file'), async (req, res) => {
     try {
+        const isPdf = req.file.mimetype === 'application/pdf';
         const fileName = `edu_source/${Date.now()}_${req.file.originalname}`;
         await s3Client.send(new PutObjectCommand({
             Bucket: "image-fragmentation-bucket-123",
@@ -65,18 +58,16 @@ app.post('/post-notice', upload.single('image'), async (req, res) => {
             Body: req.file.buffer,
             ContentType: req.file.mimetype,
         }));
-        const imageUrl = `https://image-fragmentation-bucket-123.s3.ap-south-1.amazonaws.com/${fileName}`;
-        const notice = new Notice({ ...req.body, imageUrl });
+        const fileUrl = `https://image-fragmentation-bucket-123.s3.ap-south-1.amazonaws.com/${fileName}`;
+        const notice = new Notice({ ...req.body, fileUrl, fileType: isPdf ? 'pdf' : 'image' });
         await notice.save();
-        res.status(200).json({ status: "Success" });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+        res.json({ status: "Success" });
+    } catch (e) { res.status(500).send(e.message); }
 });
 
-// Get Notices
-app.get('/notices/:branch', async (req, res) => {
-    const data = await Notice.find({ branch: req.params.branch }).sort({ createdAt: -1 });
+app.get('/notices/:branch/:year', async (req, res) => {
+    const data = await Notice.find({ branch: req.params.branch, year: req.params.year }).sort({ createdAt: -1 });
     res.json(data);
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Edu Source Backend Live`));
+app.listen(process.env.PORT || 3000);
