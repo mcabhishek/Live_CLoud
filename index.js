@@ -8,7 +8,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URI).then(() => console.log("DB Connected"));
+// --- DATABASE ---
+mongoose.connect(process.env.MONGO_URI).then(() => console.log("MongoDB Active"));
 
 const User = mongoose.model('User', new mongoose.Schema({
     name: String, studentId: String, pass: String, 
@@ -24,11 +25,19 @@ const Notice = mongoose.model('Notice', new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 }));
 
+// --- AWS S3 ---
 const s3Client = new S3Client({
     region: "ap-south-1",
     credentials: { accessKeyId: process.env.AWS_ACCESS_KEY, secretAccessKey: process.env.AWS_SECRET_KEY }
 });
 const upload = multer({ storage: multer.memoryStorage() });
+
+// --- ROUTES ---
+
+// FIX FOR CRON-JOB: This prevents the 404 error
+app.get('/', (req, res) => {
+    res.status(200).send("Edu Source Server is Awake");
+});
 
 app.post('/login', async (req, res) => {
     const user = await User.findOne({ studentId: req.body.studentId, pass: req.body.pass });
