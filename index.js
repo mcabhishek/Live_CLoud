@@ -10,7 +10,7 @@ app.use(express.json());
 
 // --- DB CONNECTION ---
 const mongoURI = process.env.MONGO_URI; 
-mongoose.connect(mongoURI).then(() => console.log("MongoDB Connected"));
+mongoose.connect(mongoURI).then(() => console.log("MongoDB Connected Successfully"));
 
 // --- SCHEMAS ---
 const User = mongoose.model('User', new mongoose.Schema({
@@ -23,7 +23,7 @@ const Notice = mongoose.model('Notice', new mongoose.Schema({
     imageUrl: String, createdAt: { type: Date, default: Date.now }
 }));
 
-// --- AWS S3 (Fixed) ---
+// --- AWS S3 CONFIG ---
 const s3Client = new S3Client({
     region: "ap-south-1",
     credentials: {
@@ -35,10 +35,10 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // --- ROUTES ---
 
-// 1. Health Check
-app.get('/', (req, res) => res.send("MCE Server is Awake and Running!"));
+// Health Check
+app.get('/', (req, res) => res.send("Edu Source Server is Awake and Running!"));
 
-// 2. Login (RE-ADDED)
+// Login
 app.post('/login', async (req, res) => {
     const { studentId, pass } = req.body;
     const user = await User.findOne({ studentId, pass });
@@ -46,7 +46,7 @@ app.post('/login', async (req, res) => {
     else res.status(401).json({ error: "Invalid Credentials" });
 });
 
-// 3. Register
+// Register
 app.post('/register', async (req, res) => {
     try {
         const user = new User(req.body);
@@ -55,10 +55,10 @@ app.post('/register', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 4. Post Notice
+// Post Notice with S3 Upload
 app.post('/post-notice', upload.single('image'), async (req, res) => {
     try {
-        const fileName = `mce/${Date.now()}_${req.file.originalname}`;
+        const fileName = `edu_source/${Date.now()}_${req.file.originalname}`;
         await s3Client.send(new PutObjectCommand({
             Bucket: "image-fragmentation-bucket-123",
             Key: fileName,
@@ -72,11 +72,11 @@ app.post('/post-notice', upload.single('image'), async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 5. Get Notices
+// Get Notices
 app.get('/notices/:branch', async (req, res) => {
     const data = await Notice.find({ branch: req.params.branch }).sort({ createdAt: -1 });
     res.json(data);
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Backend Live`));
+app.listen(PORT, () => console.log(`Edu Source Backend Live`));
